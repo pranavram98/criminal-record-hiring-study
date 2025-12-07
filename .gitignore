@@ -110,3 +110,5 @@ archive.ip
 # Test environment and outputs
 test_env/
 test_outputs/
+test_output/
+test_models.py

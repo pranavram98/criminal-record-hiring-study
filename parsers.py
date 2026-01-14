@@ -32,15 +32,35 @@ def parse_scores(scores: str) -> List[int]:
                 numbers = [int(x) for x in data['scores']]
                 if len(numbers) == CONFIG['num_questions']:
                     return numbers
-            # Fallback: look for any array of numbers
-            for key, value in data.items():
-                if isinstance(value, list) and all(isinstance(x, (int, str)) for x in value):
+            
+            # Check for Mistral JSON mode nested format: resume_evaluation.questions
+            if 'resume_evaluation' in data and isinstance(data['resume_evaluation'], dict):
+                nested = data['resume_evaluation']
+                if 'questions' in nested and isinstance(nested['questions'], list):
+                    numbers = [int(x) for x in nested['questions']]
+                    if len(numbers) == CONFIG['num_questions']:
+                        return numbers
+            
+            # Fallback: look for any array of numbers (including nested dicts)
+            def find_score_array(obj):
+                if isinstance(obj, list) and all(isinstance(x, (int, str)) for x in obj):
                     try:
-                        numbers = [int(x) for x in value]
-                        if len(numbers) == CONFIG['num_questions']:
-                            return numbers
+                        nums = [int(x) for x in obj]
+                        if len(nums) == CONFIG['num_questions']:
+                            return nums
                     except (ValueError, TypeError):
-                        continue
+                        pass
+                elif isinstance(obj, dict):
+                    for v in obj.values():
+                        result = find_score_array(v)
+                        if result:
+                            return result
+                return None
+            
+            found = find_score_array(data)
+            if found:
+                return found
+            
         elif isinstance(data, list):
             numbers = [int(x) for x in data]
             if len(numbers) == CONFIG['num_questions']:
@@ -98,10 +118,28 @@ def parse_manipulation_check(response: str) -> str:
     """Parse manipulation check (YES/NO) from response."""
     try:
         data = json.loads(response)
-        if isinstance(data, dict) and 'manipulation_check' in data:
-            value = str(data['manipulation_check']).upper()
-            if value in ['YES', 'NO']:
-                return value
+        if isinstance(data, dict):
+            # Direct field
+            if 'manipulation_check' in data:
+                value = str(data['manipulation_check']).upper()
+                if value in ['YES', 'NO']:
+                    return value
+            # Mistral nested format: resume_evaluation.manipulation_check
+            if 'resume_evaluation' in data and isinstance(data['resume_evaluation'], dict):
+                nested = data['resume_evaluation']
+                if 'manipulation_check' in nested:
+                    mc = nested['manipulation_check']
+                    # Could be string or dict with question_18 key
+                    if isinstance(mc, str):
+                        value = mc.upper()
+                        if value in ['YES', 'NO']:
+                            return value
+                    elif isinstance(mc, dict):
+                        # Handle {"question_18": "YES"} format
+                        for v in mc.values():
+                            value = str(v).upper()
+                            if value in ['YES', 'NO']:
+                                return value
     except (json.JSONDecodeError, KeyError, TypeError):
         pass
     
@@ -130,8 +168,44 @@ def parse_thought_process(response: str) -> str:
     """Extract thought process from response."""
     try:
         data = json.loads(response)
-        if isinstance(data, dict) and 'thought_process' in data:
-            return str(data['thought_process']).strip()
+        if isinstance(data, dict):
+            # Direct field
+            if 'thought_process' in data:
+                return str(data['thought_process']).strip()
+            # Mistral nested format: resume_evaluation.thought_process_analysis
+            if 'resume_evaluation' in data and isinstance(data['resume_evaluation'], dict):
+                nested = data['resume_evaluation']
+                if 'thought_process' in nested:
+                    return str(nested['thought_process']).strip()
+                if 'thought_process_analysis' in nested:
+                    tp = nested['thought_process_analysis']
+                    # Could be a string or dict with various nested structures
+                    if isinstance(tp, str):
+                        return tp.strip()
+                    elif isinstance(tp, dict):
+                        # Try direct keys first
+                        if 'response' in tp and isinstance(tp['response'], str):
+                            return tp['response'].strip()
+                        if 'formatted' in tp and isinstance(tp['formatted'], str):
+                            return tp['formatted'].strip()
+                        # Handle {"question_19": {"response": {"text": "..."}}} format
+                        def extract_text(obj):
+                            if isinstance(obj, str):
+                                return obj.strip()
+                            elif isinstance(obj, dict):
+                                if 'text' in obj:
+                                    return str(obj['text']).strip()
+                                if 'response' in obj:
+                                    return extract_text(obj['response'])
+                                # Try first string value
+                                for v in obj.values():
+                                    result = extract_text(v)
+                                    if result:
+                                        return result
+                            return None
+                        result = extract_text(tp)
+                        if result:
+                            return result
     except (json.JSONDecodeError, KeyError, TypeError):
         pass
     

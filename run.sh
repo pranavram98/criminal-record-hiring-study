@@ -15,6 +15,8 @@ echo "id,value" > /app/output_csvs_openai/test_openai.csv
 echo "id,value" > /app/output_csvs_anthropic/test_anthropic.csv
 echo "id,value" > /app/output_csvs_mistral/test_mistral.csv
 
+rclone version
+
 # Setup rclone
 mkdir -p ~/.config/rclone
 cat > ~/.config/rclone/rclone.conf <<EOF

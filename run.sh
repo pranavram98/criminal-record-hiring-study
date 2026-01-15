@@ -1,32 +1,41 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${GDRIVE_SERVICE_ACCOUNT_JSON:?missing}"
-: "${TEAM_DRIVE_ID:?missing}"
+echo "=== RCLONE OAUTH TEST START ==="
 
-RCLONE_DIR="/root/.config/rclone"
-mkdir -p "${RCLONE_DIR}"
+# -------------------------
+# 0) Sanity check
+# -------------------------
+: "${RCLONE_CONF:?Missing RCLONE_CONF environment variable}"
 
-# write service account json
-printf "%s" "$GDRIVE_SERVICE_ACCOUNT_JSON" > "${RCLONE_DIR}/sa.json"
-
-# write rclone config for Shared Drive
-cat > "${RCLONE_DIR}/rclone.conf" <<EOF
-[gdrive]
-type = drive
-scope = drive
-service_account_file = ${RCLONE_DIR}/sa.json
-team_drive = ${TEAM_DRIVE_ID}
-root_folder_id = ${FOLDER_ID}
-EOF
-
-# sanity
+# -------------------------
+# 1) Ensure rclone exists
+# -------------------------
+echo "Checking rclone..."
+which rclone
 rclone version
 
-# create test file
-echo "hello from railway shared drive test" > /app/test_upload.txt
+# -------------------------
+# 2) Write rclone config
+# -------------------------
+echo "Writing rclone config..."
+mkdir -p /root/.config/rclone
+printf "%s" "$RCLONE_CONF" > /root/.config/rclone/rclone.conf
 
-# upload
+echo "rclone config written:"
+sed 's/token = .*/token = <REDACTED>/' /root/.config/rclone/rclone.conf
+
+# -------------------------
+# 3) Create test file
+# -------------------------
+echo "Creating test file..."
+echo "hello from railway oauth test" > /app/test_upload.txt
+ls -la /app/test_upload.txt
+
+# -------------------------
+# 4) Upload to Google Drive
+# -------------------------
+echo "Uploading test file..."
 rclone copy /app/test_upload.txt gdrive:test_run --progress
 
-echo "TEST COMPLETE"
+echo "=== TEST COMPLETE ==="

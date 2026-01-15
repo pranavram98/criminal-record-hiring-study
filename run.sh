@@ -22,7 +22,7 @@ cat > ~/.config/rclone/rclone.conf <<EOF
 type = drive
 scope = drive
 service_account_credentials = ${GDRIVE_SERVICE_ACCOUNT_JSON}
-root_folder_id = ${GDRIVE_FOLDER_ID}
+root_folder_id = ${FOLDER_ID}
 EOF
 
 # Upload
